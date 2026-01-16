@@ -1,11 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
-import { Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import CustomAlert, { AlertType } from '../src/components/CustomAlert';
 import { useTheme } from '../src/context/ThemeContext';
-import { ServiceType, Trip, useVehicles, VehicleType } from '../src/context/VehicleContext';
+import { MaintenanceLog, ServiceType, Trip, useVehicles, VehicleType } from '../src/context/VehicleContext';
 import { Spacing, Typography } from '../src/theme';
 
 export default function VehicleDetailsScreen() {
@@ -20,7 +23,11 @@ export default function VehicleDetailsScreen() {
     const [modalVisible, setModalVisible] = useState(false);
     const [distance, setDistance] = useState('');
     const [tripName, setTripName] = useState('');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+
+    // Tab State
+    const [activeTab, setActiveTab] = useState<'trips' | 'maintenance'>('trips');
 
     // Edit Vehicle Modal State
     const [editModalVisible, setEditModalVisible] = useState(false);
@@ -29,6 +36,45 @@ export default function VehicleDetailsScreen() {
 
     // Menu State
     const [menuVisible, setMenuVisible] = useState(false);
+
+    // Custom Alert State
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertTitle, setAlertTitle] = useState('');
+    const [alertMessage, setAlertMessage] = useState('');
+    const [alertType, setAlertType] = useState<AlertType>('info');
+    const [onConfirm, setOnConfirm] = useState<() => void>(() => { });
+    const [onCancel, setOnCancel] = useState<(() => void) | undefined>(undefined);
+    const [confirmText, setConfirmText] = useState('Confirm');
+    const [cancelText, setCancelText] = useState('Cancel');
+
+    const showAlert = (
+        title: string,
+        message: string,
+        confirmAction: () => void,
+        type: AlertType = 'info',
+        cancelAction?: () => void,
+        confirmLabel: string = 'Confirm',
+        cancelLabel: string = 'Cancel'
+    ) => {
+        setAlertTitle(title);
+        setAlertMessage(message);
+        setOnConfirm(() => () => {
+            confirmAction();
+            setAlertVisible(false);
+        });
+        if (cancelAction) {
+            setOnCancel(() => () => {
+                cancelAction();
+                setAlertVisible(false);
+            });
+        } else {
+            setOnCancel(undefined);
+        }
+        setAlertType(type);
+        setConfirmText(confirmLabel);
+        setCancelText(cancelLabel);
+        setAlertVisible(true);
+    };
 
     if (!vehicle) {
         return (
@@ -50,21 +96,21 @@ export default function VehicleDetailsScreen() {
     };
 
     const handleServiceAction = (serviceType: ServiceType) => {
-        Alert.alert(
+        showAlert(
             `Perform ${serviceType} Service?`,
             `This will reset the ${serviceType.toLowerCase()} service counter.`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Confirm',
-                    onPress: async () => {
-                        const success = await performService(vehicle.id, serviceType);
-                        if (success) {
-                            Alert.alert('Success', `${serviceType} service recorded!`);
-                        }
-                    }
+            async () => {
+                const success = await performService(vehicle.id, serviceType);
+                if (success) {
+                    // Show success alert
+                    setTimeout(() => {
+                        showAlert('Success', `${serviceType} service recorded!`, () => { }, 'success', undefined, 'OK');
+                    }, 500);
                 }
-            ]
+            },
+            'info',
+            () => { },
+            'Confirm'
         );
     };
 
@@ -81,28 +127,24 @@ export default function VehicleDetailsScreen() {
         if (success) {
             setEditModalVisible(false);
         } else {
-            Alert.alert('Error', 'Failed to update vehicle.');
+            showAlert('Error', 'Failed to update vehicle.', () => { }, 'danger', undefined, 'OK');
         }
     };
 
     const handleDeleteVehicle = () => {
         setMenuVisible(false);
-        Alert.alert(
+        showAlert(
             'Delete Vehicle',
             'Are you sure you want to delete this vehicle and all its trips? This cannot be undone.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        const success = await deleteVehicle(vehicle.id);
-                        if (success) {
-                            router.back();
-                        }
-                    }
+            async () => {
+                const success = await deleteVehicle(vehicle.id);
+                if (success) {
+                    router.back();
                 }
-            ]
+            },
+            'danger',
+            () => { },
+            'Delete'
         );
     };
 
@@ -111,12 +153,14 @@ export default function VehicleDetailsScreen() {
 
         const distNum = Number.parseFloat(distance);
         if (Number.isNaN(distNum)) {
-            Alert.alert('Invalid Distance', 'Please enter a valid number');
+            showAlert('Invalid Distance', 'Please enter a valid number', () => { }, 'danger', undefined, 'OK');
             return;
         }
 
+        const formattedDate = date.toISOString().split('T')[0];
+
         await addTrip(vehicle.id, {
-            date,
+            date: formattedDate,
             distance: distNum, // Use distNum directly
             name: tripName || 'Daily Commute'
         });
@@ -127,19 +171,15 @@ export default function VehicleDetailsScreen() {
     };
 
     const handleDeleteTrip = (tripId: string) => {
-        Alert.alert(
+        showAlert(
             'Delete Trip',
             'Are you sure?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        await deleteTrip(tripId);
-                    }
-                }
-            ]
+            async () => {
+                await deleteTrip(tripId);
+            },
+            'danger',
+            () => { },
+            'Delete'
         );
     };
 
@@ -169,8 +209,34 @@ export default function VehicleDetailsScreen() {
         </Swipeable>
     );
 
+    const renderMaintenanceLog = ({ item }: { item: MaintenanceLog }) => (
+        <View style={styles.logItem}>
+            <View style={styles.logLeft}>
+                <Ionicons
+                    name={item.serviceType === 'Oil' ? 'water' : 'settings'}
+                    size={24}
+                    color={colors.textSecondary}
+                />
+                <View style={styles.logInfo}>
+                    <Text style={styles.logDate}>{new Date(item.date).toLocaleDateString()}</Text>
+                    <Text style={styles.logType}>{item.serviceType} Service</Text>
+                </View>
+            </View>
+            <Text style={styles.logDistance}>{item.mileageAtService.toLocaleString()} km</Text>
+        </View>
+    );
+
+    const onDateChange = (event: any, selectedDate?: Date) => {
+        const currentDate = selectedDate || date;
+        setShowDatePicker(Platform.OS === 'ios');
+        setDate(currentDate);
+    };
+
+    const statusBarStyle = colors.background === '#000000' ? 'light' : 'dark';
+
     return (
         <SafeAreaView style={styles.container}>
+            <StatusBar style={statusBarStyle} />
             {/* Custom Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -223,23 +289,64 @@ export default function VehicleDetailsScreen() {
                 </View>
             </View>
 
-            <View style={styles.listContainer}>
-                <Text style={styles.sectionTitle}>Recent Trips</Text>
-                <Text style={styles.swipeHint}>Swipe to delete</Text>
-                <FlatList
-                    data={[...vehicle.trips].reverse()}
-                    renderItem={renderTrip}
-                    keyExtractor={item => item.id}
-                    contentContainerStyle={styles.listContent}
-                    ListEmptyComponent={
-                        <Text style={styles.emptyText}>No trips recorded yet.</Text>
-                    }
-                />
+            {/* Tab Selector */}
+            <View style={styles.tabContainer}>
+                <TouchableOpacity
+                    style={[styles.tab, activeTab === 'trips' && styles.activeTab]}
+                    onPress={() => setActiveTab('trips')}
+                >
+                    <Text style={[styles.tabText, activeTab === 'trips' && styles.activeTabText]}>Recent Trips</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.tab, activeTab === 'maintenance' && styles.activeTab]}
+                    onPress={() => setActiveTab('maintenance')}
+                >
+                    <Text style={[styles.tabText, activeTab === 'maintenance' && styles.activeTabText]}>Maintenance</Text>
+                </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
-                <Ionicons name="add" size={32} color="#FFFFFF" />
-            </TouchableOpacity>
+            {/* Content Area */}
+            <View style={styles.contentArea}>
+                {activeTab === 'maintenance' ? (
+                    <View style={styles.listContainer}>
+                        {vehicle.maintenanceHistory && vehicle.maintenanceHistory.length > 0 ? (
+                            <FlatList
+                                data={[...vehicle.maintenanceHistory].reverse()}
+                                renderItem={renderMaintenanceLog}
+                                keyExtractor={item => item.id}
+                                contentContainerStyle={styles.listContent}
+                                ListEmptyComponent={
+                                    <Text style={styles.emptyText}>No maintenance records yet.</Text>
+                                }
+                            />
+                        ) : (
+                            <Text style={styles.emptyText}>No maintenance records yet.</Text>
+                        )}
+                    </View>
+                ) : (
+                    <View style={styles.listContainer}>
+                        <Text style={styles.swipeHint}>Swipe to delete</Text>
+                        <FlatList
+                            data={[...vehicle.trips].reverse()}
+                            renderItem={renderTrip}
+                            keyExtractor={item => item.id}
+                            contentContainerStyle={styles.listContent}
+                            ListEmptyComponent={
+                                <Text style={styles.emptyText}>No trips recorded yet.</Text>
+                            }
+                        />
+                    </View>
+                )}
+            </View>
+
+
+
+            {/* FAB only for Trips tab */}
+            {activeTab === 'trips' && (
+                <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
+                    <Ionicons name="add" size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+            )}
 
             {/* Add Trip Modal */}
             <Modal
@@ -253,13 +360,21 @@ export default function VehicleDetailsScreen() {
                         <Text style={styles.modalTitle}>Add Trip</Text>
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Date</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={date}
-                                onChangeText={setDate}
-                                placeholder="YYYY-MM-DD"
-                                placeholderTextColor={colors.textSecondary}
-                            />
+                            <TouchableOpacity
+                                style={styles.dateButton}
+                                onPress={() => setShowDatePicker(true)}
+                            >
+                                <Text style={styles.dateButtonText}>{date.toLocaleDateString()}</Text>
+                            </TouchableOpacity>
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    testID="dateTimePicker"
+                                    value={date}
+                                    mode="date"
+                                    is24Hour={true}
+                                    onChange={onDateChange}
+                                />
+                            )}
                         </View>
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Distance (km)</Text>
@@ -341,7 +456,20 @@ export default function VehicleDetailsScreen() {
                 </View>
             </Modal>
 
-        </SafeAreaView>
+
+
+            <CustomAlert
+                visible={alertVisible}
+                title={alertTitle}
+                message={alertMessage}
+                onConfirm={onConfirm}
+                onCancel={onCancel}
+                confirmText={confirmText}
+                cancelText={cancelText}
+                type={alertType}
+            />
+
+        </SafeAreaView >
     );
 }
 
@@ -605,5 +733,87 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     selectedTypeOptionText: {
         color: colors.primary,
+    },
+    historyContainer: {
+        marginHorizontal: Spacing.l,
+        marginBottom: Spacing.m,
+    },
+    historyList: {
+        gap: Spacing.s,
+    },
+    logItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: Spacing.m,
+        backgroundColor: colors.surface,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    logLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.m,
+    },
+    logInfo: {
+        gap: 2,
+    },
+    logDate: {
+        ...Typography.body,
+        fontSize: 12,
+        color: colors.textSecondary,
+    },
+    logType: {
+        ...Typography.button,
+        color: colors.text,
+        fontSize: 14,
+    },
+    logDistance: {
+        ...Typography.body,
+        fontWeight: 'bold',
+        color: colors.text,
+    },
+    dateButton: {
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 12,
+        padding: Spacing.m,
+    },
+    dateButtonText: {
+        color: colors.text,
+        fontSize: 16,
+    },
+    // Tabs
+    tabContainer: {
+        flexDirection: 'row',
+        marginHorizontal: Spacing.l,
+        marginBottom: Spacing.m,
+        backgroundColor: colors.surface,
+        borderRadius: 12,
+        padding: 4,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: Spacing.s,
+        alignItems: 'center',
+        borderRadius: 8,
+    },
+    activeTab: {
+        backgroundColor: colors.primary,
+    },
+    tabText: {
+        ...Typography.button,
+        color: colors.textSecondary,
+        fontSize: 14,
+    },
+    activeTabText: {
+        color: '#FFFFFF',
+    },
+    contentArea: {
+        flex: 1,
     }
 });

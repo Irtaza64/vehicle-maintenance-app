@@ -20,6 +20,16 @@ export type Vehicle = {
     totalDistance: number;
     lastOilService: number;
     lastMaintenanceService: number;
+    maintenanceHistory: MaintenanceLog[];
+};
+
+export type MaintenanceLog = {
+    id: string;
+    vehicleId: string;
+    serviceType: ServiceType;
+    date: string;
+    mileageAtService: number;
+    notes?: string;
 };
 
 export type ServiceType = 'Oil' | 'Maintenance';
@@ -69,10 +79,10 @@ export function VehicleProvider({ children }: { children: React.ReactNode }) {
     const loadVehicles = async () => {
         setIsLoading(true);
         try {
-            // Fetch vehicles with trips
+            // Fetch vehicles with trips and maintenance logs
             const { data: fullData, error: joinError } = await supabase
                 .from('vehicles')
-                .select('*, trips(*)');
+                .select('*, trips(*), maintenance_logs(*)');
 
             if (joinError) throw joinError;
 
@@ -88,6 +98,14 @@ export function VehicleProvider({ children }: { children: React.ReactNode }) {
                     date: t.date,
                     distance: parseFloat(t.distance),
                     name: t.name
+                })) : [],
+                maintenanceHistory: v.maintenance_logs ? v.maintenance_logs.map((m: any) => ({
+                    id: m.id,
+                    vehicleId: m.vehicle_id,
+                    serviceType: m.service_type,
+                    date: m.date,
+                    mileageAtService: parseFloat(m.mileage_at_service),
+                    notes: m.notes
                 })) : []
             }));
 
@@ -179,12 +197,26 @@ export function VehicleProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
-            const { error } = await supabase
+            // 1. Update vehicle counters
+            const { error: updateError } = await supabase
                 .from('vehicles')
                 .update(updates)
                 .eq('id', vehicleId);
 
-            if (error) throw error;
+            if (updateError) throw updateError;
+
+            // 2. Add maintenance log
+            const { error: logError } = await supabase
+                .from('maintenance_logs')
+                .insert({
+                    vehicle_id: vehicleId,
+                    service_type: serviceType,
+                    date: new Date().toISOString(),
+                    mileage_at_service: vehicle.totalDistance,
+                });
+
+            if (logError) throw logError;
+
             await loadVehicles();
             return true;
         } catch (e: any) {
