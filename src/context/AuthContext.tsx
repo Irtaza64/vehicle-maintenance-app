@@ -1,7 +1,12 @@
 import { Session, User } from '@supabase/supabase-js';
+import { makeRedirectUri } from 'expo-auth-session';
 import { useRouter, useSegments } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
+
+WebBrowser.maybeCompleteAuthSession();
 
 type AuthType = {
     user: User | null;
@@ -9,6 +14,7 @@ type AuthType = {
     isLoading: boolean;
     signIn: (email: string, password: string) => Promise<void>;
     signUp: (email: string, password: string, name: string) => Promise<void>;
+    signInWithGoogle: () => Promise<void>;
     signOut: () => void;
 };
 
@@ -18,6 +24,7 @@ const AuthContext = createContext<AuthType>({
     isLoading: false,
     signIn: async () => { },
     signUp: async () => { },
+    signInWithGoogle: async () => { },
     signOut: () => { },
 });
 
@@ -33,11 +40,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        const fetchSession = async () => {
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error) {
+                console.error('Error fetching session:', error);
+                supabase.auth.signOut();
+            }
             setSession(session);
             setUser(session ? session.user : null);
             setIsLoading(false);
-        });
+        };
+
+        fetchSession();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
@@ -93,6 +107,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
     };
 
+    const signInWithGoogle = async () => {
+        setIsLoading(true);
+        try {
+            const redirectUri = makeRedirectUri({
+                path: 'auth/callback',
+            });
+
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: redirectUri,
+                    skipBrowserRedirect: true,
+                },
+            });
+
+            if (error) throw error;
+
+            const res = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
+
+            if (res.type === 'success') {
+                const { url } = res;
+                if (url) {
+                    const params = new URLSearchParams(url.split('#')[1]);
+                    const accessToken = params.get('access_token');
+                    const refreshToken = params.get('refresh_token');
+
+                    if (accessToken && refreshToken) {
+                        const { error } = await supabase.auth.setSession({
+                            access_token: accessToken,
+                            refresh_token: refreshToken,
+                        });
+                        if (error) throw error;
+                    }
+                }
+            }
+        } catch (error: any) {
+            Alert.alert('Google Sign-In Failed', error.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const signOut = async () => {
         await supabase.auth.signOut();
     };
@@ -105,6 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 isLoading,
                 signIn,
                 signUp,
+                signInWithGoogle,
                 signOut,
             }}
         >
@@ -113,5 +170,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 }
 
-import { Alert } from 'react-native';
+
 

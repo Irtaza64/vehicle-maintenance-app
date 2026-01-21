@@ -43,6 +43,7 @@ type VehicleContextType = {
     deleteTrip: (tripId: string) => Promise<boolean>;
     performService: (vehicleId: string, serviceType: ServiceType) => Promise<boolean>;
     getVehicle: (id: string) => Vehicle | undefined;
+    refreshVehicles: () => Promise<void>;
     isLoading: boolean;
 };
 
@@ -55,6 +56,7 @@ const VehicleContext = createContext<VehicleContextType>({
     deleteTrip: async () => false,
     performService: async () => false,
     getVehicle: () => undefined,
+    refreshVehicles: async () => { },
     isLoading: false,
 });
 
@@ -301,7 +303,7 @@ export function VehicleProvider({ children }: { children: React.ReactNode }) {
     const getVehicle = (id: string) => vehicles.find(v => v.id === id);
 
     return (
-        <VehicleContext.Provider value={{ vehicles, addVehicle, updateVehicle, deleteVehicle, addTrip, deleteTrip, performService, getVehicle, isLoading }}>
+        <VehicleContext.Provider value={{ vehicles, addVehicle, updateVehicle, deleteVehicle, addTrip, deleteTrip, performService, getVehicle, refreshVehicles: loadVehicles, isLoading }}>
             {children}
         </VehicleContext.Provider>
     );

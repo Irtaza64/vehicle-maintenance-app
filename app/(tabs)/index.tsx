@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
@@ -9,10 +10,18 @@ import { useVehicles, Vehicle } from '../../src/context/VehicleContext';
 import { Spacing, Typography } from '../../src/theme';
 
 export default function HomeScreen() {
-  const { vehicles, isLoading } = useVehicles();
+  const { vehicles, isLoading, refreshVehicles } = useVehicles();
   const { user } = useAuth();
   const router = useRouter();
   const { colors } = useTheme();
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshVehicles();
+    setRefreshing(false);
+  }, [refreshVehicles]);
   const styles = getStyles(colors);
 
   const renderVehicle = ({ item }: { item: Vehicle }) => (
@@ -68,7 +77,16 @@ export default function HomeScreen() {
           <Text style={styles.headerTitle}>Your Garage</Text>
         </View>
         <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/settings')}>
-          <Ionicons name="person-circle-outline" size={32} color={colors.text} />
+          {user?.user_metadata?.avatar_url ? (
+            <Image
+              source={{ uri: user.user_metadata.avatar_url }}
+              style={styles.avatar}
+              contentFit="cover"
+              transition={1000}
+            />
+          ) : (
+            <Ionicons name="person-circle-outline" size={32} color={colors.text} />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -78,6 +96,9 @@ export default function HomeScreen() {
         keyExtractor={item => item.id}
         contentContainerStyle={[styles.listContent, vehicles.length === 0 && styles.listEmpty]}
         ListEmptyComponent={!isLoading ? EmptyState : null}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
       />
 
       {vehicles.length > 0 && (
@@ -116,6 +137,13 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   profileButton: {
     padding: Spacing.s,
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   listContent: {
     padding: Spacing.l,

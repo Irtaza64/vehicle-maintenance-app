@@ -1,3 +1,4 @@
+import { AntDesign } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -8,7 +9,7 @@ import { Spacing, Typography } from '../../src/theme';
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const { signIn, isLoading } = useAuth();
+    const { signIn, signInWithGoogle, isLoading } = useAuth();
     const router = useRouter();
     const { colors } = useTheme();
     const styles = getStyles(colors);
@@ -66,6 +67,21 @@ export default function LoginScreen() {
 
                 <TouchableOpacity onPress={() => router.push('/(auth)/register')} style={styles.footerLink}>
                     <Text style={styles.footerText}>Don&apos;t have an account? <Text style={styles.linkText}>Create one</Text></Text>
+                </TouchableOpacity>
+
+                <View style={styles.divider}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>or</Text>
+                    <View style={styles.dividerLine} />
+                </View>
+
+                <TouchableOpacity
+                    style={styles.googleButton}
+                    onPress={signInWithGoogle}
+                    disabled={isLoading}
+                >
+                    <AntDesign name="google" size={20} color={colors.text} />
+                    <Text style={styles.googleButtonText}>Continue with Google</Text>
                 </TouchableOpacity>
             </View>
         </KeyboardAvoidingView>
@@ -134,5 +150,35 @@ const getStyles = (colors: any) => StyleSheet.create({
     linkText: {
         color: colors.primary,
         fontWeight: 'bold',
+    },
+    divider: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: Spacing.s,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: colors.border,
+    },
+    dividerText: {
+        ...Typography.caption,
+        color: colors.textSecondary,
+        marginHorizontal: Spacing.m,
+    },
+    googleButton: {
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        padding: Spacing.m,
+        borderRadius: 12,
+        alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: Spacing.s,
+    },
+    googleButtonText: {
+        ...Typography.button,
+        color: colors.text,
     },
 });

@@ -54,4 +54,8 @@ export const Typography = {
         fontSize: 16,
         fontWeight: '600' as const,
     },
+    caption: {
+        fontSize: 12,
+        lineHeight: 16,
+    },
 };

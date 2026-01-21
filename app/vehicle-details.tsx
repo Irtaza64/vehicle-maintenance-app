@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
-import { FlatList, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomAlert, { AlertType } from '../src/components/CustomAlert';
@@ -13,7 +13,7 @@ import { Spacing, Typography } from '../src/theme';
 
 export default function VehicleDetailsScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
-    const { getVehicle, addTrip, deleteTrip, deleteVehicle, updateVehicle, performService } = useVehicles();
+    const { getVehicle, addTrip, deleteTrip, deleteVehicle, updateVehicle, performService, refreshVehicles } = useVehicles();
     const router = useRouter();
     const vehicle = getVehicle(id);
     const { colors } = useTheme();
@@ -25,6 +25,14 @@ export default function VehicleDetailsScreen() {
     const [tripName, setTripName] = useState('');
     const [date, setDate] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
+
+    const [refreshing, setRefreshing] = useState(false);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await refreshVehicles();
+        setRefreshing(false);
+    }, [refreshVehicles]);
 
     // Tab State
     const [activeTab, setActiveTab] = useState<'trips' | 'maintenance'>('trips');
@@ -318,6 +326,9 @@ export default function VehicleDetailsScreen() {
                                 ListEmptyComponent={
                                     <Text style={styles.emptyText}>No maintenance records yet.</Text>
                                 }
+                                refreshControl={
+                                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+                                }
                             />
                         ) : (
                             <Text style={styles.emptyText}>No maintenance records yet.</Text>
@@ -333,6 +344,9 @@ export default function VehicleDetailsScreen() {
                             contentContainerStyle={styles.listContent}
                             ListEmptyComponent={
                                 <Text style={styles.emptyText}>No trips recorded yet.</Text>
+                            }
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
                             }
                         />
                     </View>
